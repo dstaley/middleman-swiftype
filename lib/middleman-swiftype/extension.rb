@@ -1,36 +1,40 @@
 # Require core library
-require "middleman-core"
+require 'middleman-core'
 
 # Extension namespace
 module Middleman
-  module Swiftype
-
-    class Options < Struct.new(:api_key, :engine_slug, :pages_selector, :process_html, :generate_sections, :generate_info, :generate_image); end
+  module SwiftypeGenerator
+    class Options < Struct.new(:process_html, :pages_selector); end
 
     class << self
-      def registered(app, options_hash={}, &block)
-        app.send :include, Helpers
+      def options
+        @@options
+      end
 
+      def registered(app, options_hash = {}, &block)
         options = Options.new(options_hash)
         yield options if block_given?
 
-        options.pages_selector ||= lambda { |p| p.path.match(/\.html/) && p.template? && !p.directory_index? }
+        options.pages_selector = lambda { |p| p.path.match(/\.html/) && p.metadata[:options][:layout] == nil } unless options.pages_selector
 
-        app.after_configuration do
-          # create app.swiftype
-          swiftype(options)
+        @@options = options
+
+        app.send :include, Helpers
+
+        app.after_build do |builder|
+          output = File.join(app.build_dir, 'search.json' || @@options[:output])
+          ::Middleman::Cli::SwiftypeGenerator.new.push_to_json(output)
+          builder.say_status :create, output
         end
       end
 
-      alias :included :registered
+      alias_method :included, :registered
     end
 
     module Helpers
-      # create app.swiftype
-      def swiftype(options=nil)
-        @_swiftype ||= Struct.new(:options).new(options)
+      def options
+        ::Middleman::SwiftypeGenerator.options
       end
     end
-
   end
 end
